@@ -31,31 +31,7 @@ local StopDistance = 5
 local WalkAwayDistance = 15
 
 --------------------------------------------------
--- RESPAWN MOVEMENT LOCK
---------------------------------------------------
-
-local RespawnRouteActive = false
-
---------------------------------------------------
--- FIRE MAGE STATE
---------------------------------------------------
-
-local FireMageTarget = nil
-local FireMageDodgeSide = 1
-local FireMageNextDodgeTime = 0
-
---------------------------------------------------
--- FIRE BRUTE STATE
---------------------------------------------------
-
-local FireBruteTarget = nil
-local FireBrutePreviousTarget = nil
-local FireBruteState = "Find"
-local FireBruteAwayPosition = nil
-local FireBruteLockStartTime = 0
-
---------------------------------------------------
--- CHARACTER HELPERS
+-- CHARACTER
 --------------------------------------------------
 
 local function GetCharacter()
@@ -83,7 +59,7 @@ local function GetRoot()
 end
 
 --------------------------------------------------
--- MODEL HELPERS
+-- GENERAL FUNCTIONS
 --------------------------------------------------
 
 local function GetModelCenter(model)
@@ -140,11 +116,9 @@ local function GetDodgePosition(root, target, side)
     )
 
     if direction.Magnitude < 0.05 then
-        direction =
-            Vector3.new(0, 0, 1)
+        direction = Vector3.new(0, 0, 1)
     else
-        direction =
-            direction.Unit
+        direction = direction.Unit
     end
 
     local sideDirection =
@@ -206,7 +180,8 @@ local function FaceTarget(root, target, deltaTime)
 
     direction = direction.Unit
 
-    local look = root.CFrame.LookVector
+    local look =
+        root.CFrame.LookVector
 
     look = Vector3.new(
         look.X,
@@ -287,14 +262,28 @@ local function GetWalkAwayPosition(root, target)
 end
 
 --------------------------------------------------
--- RESET STATES
+-- FIRE MAGE STATE
 --------------------------------------------------
+
+local FireMageTarget = nil
+local FireMageDodgeSide = 1
+local FireMageNextDodgeTime = 0
 
 local function ResetFireMage()
     FireMageTarget = nil
     FireMageDodgeSide = 1
     FireMageNextDodgeTime = 0
 end
+
+--------------------------------------------------
+-- FIRE BRUTE STATE
+--------------------------------------------------
+
+local FireBruteTarget = nil
+local FireBrutePreviousTarget = nil
+local FireBruteState = "Find"
+local FireBruteAwayPosition = nil
+local FireBruteLockStartTime = 0
 
 local function ResetFireBrute()
     FireBruteTarget = nil
@@ -328,12 +317,18 @@ local Route = {
     )
 }
 
+local RespawnRouteActive = false
+
 local function WalkToRoutePoint(character, position)
     local humanoid =
-        character:FindFirstChildOfClass("Humanoid")
+        character:FindFirstChildOfClass(
+            "Humanoid"
+        )
 
     local root =
-        character:FindFirstChild("HumanoidRootPart")
+        character:FindFirstChild(
+            "HumanoidRootPart"
+        )
 
     if not humanoid or not root then
         return false
@@ -368,14 +363,15 @@ local function RunRespawnRoute(character)
 
     RespawnRouteActive = true
 
-    -- Kill all old combat states
     ResetFireMage()
     ResetFireBrute()
 
     local humanoid =
         character:WaitForChild("Humanoid")
 
-    character:WaitForChild("HumanoidRootPart")
+    character:WaitForChild(
+        "HumanoidRootPart"
+    )
 
     task.wait(1)
 
@@ -386,7 +382,6 @@ local function RunRespawnRoute(character)
         return
     end
 
-    -- Point 1
     if not WalkToRoutePoint(
         character,
         Route[1]
@@ -395,7 +390,6 @@ local function RunRespawnRoute(character)
         return
     end
 
-    -- Point 2
     if not WalkToRoutePoint(
         character,
         Route[2]
@@ -404,7 +398,6 @@ local function RunRespawnRoute(character)
         return
     end
 
-    -- Point 3
     if not WalkToRoutePoint(
         character,
         Route[3]
@@ -413,7 +406,6 @@ local function RunRespawnRoute(character)
         return
     end
 
-    -- Fresh states after route
     ResetFireMage()
     ResetFireBrute()
 
@@ -421,52 +413,82 @@ local function RunRespawnRoute(character)
 end
 
 --------------------------------------------------
--- FIRE MAGE CONTROLLER
+-- MOVEMENT CONTROLLER
+--
+-- ONLY THIS LOOP CONTROLS MOVEMENT.
+-- FM and FB CANNOT FIGHT EACH OTHER.
 --------------------------------------------------
 
-local function StartFireMage()
-    task.spawn(function()
+task.spawn(function()
 
-        while FireMageEnabled do
+    while true do
 
-            -- Respawn route owns movement
-            if RespawnRouteActive then
-                ResetFireMage()
-                task.wait(0.1)
-                continue
-            end
+        --------------------------------------------------
+        -- RESPAWN ROUTE OWNS MOVEMENT
+        --------------------------------------------------
 
-            local character =
-                Player.Character
+        if RespawnRouteActive then
+            task.wait(0.1)
+            continue
+        end
 
-            local humanoid =
-                character and
-                character:FindFirstChildOfClass("Humanoid")
+        local character =
+            Player.Character
 
-            local root =
-                character and
-                character:FindFirstChild("HumanoidRootPart")
+        local humanoid =
+            character
+            and character:FindFirstChildOfClass(
+                "Humanoid"
+            )
 
-            if not humanoid or not root then
-                task.wait(0.1)
-                continue
-            end
+        local root =
+            character
+            and character:FindFirstChild(
+                "HumanoidRootPart"
+            )
 
-            if humanoid.Health <= 0 then
-                ResetFireMage()
-                task.wait(0.1)
-                continue
-            end
+        if not humanoid or not root then
+            task.wait(0.1)
+            continue
+        end
+
+        if humanoid.Health <= 0 then
+            ResetFireMage()
+            ResetFireBrute()
+
+            task.wait(0.1)
+            continue
+        end
+
+        --------------------------------------------------
+        -- ACTUAL FIRE MAGE DETECTION
+        --
+        -- Toggle ON alone does NOTHING.
+        -- A FireMage model must actually exist.
+        --------------------------------------------------
+
+        local FireMageSpawned = nil
+
+        if FireMageEnabled then
+            FireMageSpawned = GetFireMage()
+        end
+
+        --------------------------------------------------
+        -- FIRE MAGE HAS MOVEMENT PRIORITY
+        -- ONLY WHILE IT ACTUALLY EXISTS.
+        --------------------------------------------------
+
+        if FireMageSpawned then
+
+            --------------------------------------------------
+            -- FM TARGET
+            --------------------------------------------------
 
             if not FireMageTarget
                 or not FireMageTarget.Parent
             then
-                FireMageTarget =
-                    GetFireMage()
-
-                if FireMageTarget then
-                    FireMageNextDodgeTime = 0
-                end
+                FireMageTarget = FireMageSpawned
+                FireMageNextDodgeTime = 0
             end
 
             if FireMageTarget
@@ -479,6 +501,10 @@ local function StartFireMage()
                         FireMageTarget
                     )
 
+                --------------------------------------------------
+                -- WALK TOWARD FIRE MAGE
+                --------------------------------------------------
+
                 if distance > AttackDistance then
 
                     humanoid:MoveTo(
@@ -486,6 +512,10 @@ local function StartFireMage()
                             FireMageTarget
                         )
                     )
+
+                --------------------------------------------------
+                -- DODGE AROUND FIRE MAGE
+                --------------------------------------------------
 
                 else
 
@@ -524,6 +554,7 @@ local function StartFireMage()
                 end
 
             else
+                ResetFireMage()
 
                 humanoid:Move(
                     Vector3.zero,
@@ -535,77 +566,25 @@ local function StartFireMage()
                 )
             end
 
-            task.wait(0.1)
-        end
+        --------------------------------------------------
+        -- NO FIRE MAGE SPAWNED
+        -- FIRE BRUTE GETS FULL CONTROL.
+        --------------------------------------------------
 
-        ResetFireMage()
-    end)
-end
-
---------------------------------------------------
--- FIRE BRUTE CONTROLLER
--- KEEPING THE ORIGINAL MOVEMENT LOOP
---------------------------------------------------
-
-local function StartFireBrute()
-    task.spawn(function()
-
-        while FireBruteEnabled do
+        elseif FireBruteEnabled then
 
             --------------------------------------------------
-            -- ONLY NEW EXTERNAL LOCK
+            -- FIRE MAGE DISAPPEARED
+            -- CLEAR ONLY FM STATE.
             --------------------------------------------------
 
-            if RespawnRouteActive then
-                ResetFireBrute()
-
-                task.wait(0.1)
-                continue
+            if FireMageTarget then
+                ResetFireMage()
             end
 
             --------------------------------------------------
-            -- FIRE MAGE HAS MOVEMENT CONTROL
+            -- ORIGINAL FIRE BRUTE FIND
             --------------------------------------------------
-
-            if FireMageEnabled
-                and GetFireMage()
-            then
-                ResetFireBrute()
-
-                task.wait(0.1)
-                continue
-            end
-
-            --------------------------------------------------
-            -- ORIGINAL FIREBRUTE CODE
-            --------------------------------------------------
-
-            local character =
-                Player.Character
-
-            local humanoid =
-                character and
-                character:FindFirstChildOfClass(
-                    "Humanoid"
-                )
-
-            local root =
-                character and
-                character:FindFirstChild(
-                    "HumanoidRootPart"
-                )
-
-            if not humanoid or not root then
-                task.wait(0.1)
-                continue
-            end
-
-            if humanoid.Health <= 0 then
-                ResetFireBrute()
-
-                task.wait(0.1)
-                continue
-            end
 
             if FireBruteState == "Find" then
 
@@ -616,7 +595,9 @@ local function StartFireBrute()
                     )
 
                 if FireBruteTarget then
+
                     FireBruteState = "Spin"
+
                 else
 
                     FireBrutePreviousTarget = nil
@@ -632,6 +613,10 @@ local function StartFireBrute()
                     end
                 end
             end
+
+            --------------------------------------------------
+            -- ORIGINAL FIRE BRUTE LOGIC
+            --------------------------------------------------
 
             if FireBruteTarget
                 and FireBruteTarget.Parent
@@ -702,6 +687,7 @@ local function StartFireBrute()
                 if FireBruteState == "WalkAway" then
 
                     if not FireBruteAwayPosition then
+
                         FireBruteAwayPosition =
                             GetWalkAwayPosition(
                                 root,
@@ -803,12 +789,28 @@ local function StartFireBrute()
                     "Find"
             end
 
-            task.wait(0.1)
+        --------------------------------------------------
+        -- NOTHING ACTIVE
+        --------------------------------------------------
+
+        else
+
+            ResetFireMage()
+            ResetFireBrute()
+
+            humanoid:Move(
+                Vector3.zero,
+                false
+            )
+
+            humanoid:MoveTo(
+                root.Position
+            )
         end
 
-        ResetFireBrute()
-    end)
-end
+        task.wait(0.1)
+    end
+end)
 
 --------------------------------------------------
 -- CHARACTER / DEATH
@@ -817,7 +819,9 @@ end
 local function SetupCharacter(character)
 
     local humanoid =
-        character:WaitForChild("Humanoid")
+        character:WaitForChild(
+            "Humanoid"
+        )
 
     character:WaitForChild(
         "HumanoidRootPart"
@@ -825,11 +829,9 @@ local function SetupCharacter(character)
 
     humanoid.Died:Connect(function()
 
-        -- Immediately kill both controllers' states
         ResetFireMage()
         ResetFireBrute()
 
-        -- Route lock begins
         if FireMageEnabled
             or FireBruteEnabled
         then
@@ -838,19 +840,11 @@ local function SetupCharacter(character)
     end)
 end
 
---------------------------------------------------
--- CURRENT CHARACTER
---------------------------------------------------
-
 if Player.Character then
     SetupCharacter(
         Player.Character
     )
 end
-
---------------------------------------------------
--- RESPAWN
---------------------------------------------------
 
 Player.CharacterAdded:Connect(
     function(character)
@@ -862,7 +856,9 @@ Player.CharacterAdded:Connect(
         then
 
             task.spawn(function()
-                RunRespawnRoute(character)
+                RunRespawnRoute(
+                    character
+                )
             end)
 
         else
@@ -873,23 +869,21 @@ Player.CharacterAdded:Connect(
 )
 
 --------------------------------------------------
--- UI
+-- FIRE MAGE UI
 --------------------------------------------------
 
 Tab:CreateToggle({
     Name = "Fire Mage [ BOSS ]",
     CurrentValue = false,
     Flag = "FireMage",
+
     Callback = function(Value)
 
         FireMageEnabled = Value
 
         if not Value then
             ResetFireMage()
-            return
         end
-
-        StartFireMage()
     end
 })
 
@@ -899,11 +893,15 @@ Tab:CreateInput({
     PlaceholderText = "Enter distance",
     RemoveTextAfterFocusLost = false,
     Flag = "AttackDistance",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number >= 0 then
+        if number
+            and number >= 0
+        then
             AttackDistance = number
         end
     end
@@ -915,11 +913,16 @@ Tab:CreateInput({
     PlaceholderText = "Seconds",
     RemoveTextAfterFocusLost = false,
     Flag = "DodgeMin",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number > 0 then
+        if number
+            and number > 0
+        then
+
             DodgeMin = number
 
             if DodgeMax < DodgeMin then
@@ -935,11 +938,16 @@ Tab:CreateInput({
     PlaceholderText = "Seconds",
     RemoveTextAfterFocusLost = false,
     Flag = "DodgeMax",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number > 0 then
+        if number
+            and number > 0
+        then
+
             DodgeMax = number
 
             if DodgeMax < DodgeMin then
@@ -949,20 +957,22 @@ Tab:CreateInput({
     end
 })
 
+--------------------------------------------------
+-- FIRE BRUTE UI
+--------------------------------------------------
+
 Tab:CreateToggle({
     Name = "FireBrute [ MOBS ]",
     CurrentValue = false,
     Flag = "FireBrute",
+
     Callback = function(Value)
 
         FireBruteEnabled = Value
 
         if not Value then
             ResetFireBrute()
-            return
         end
-
-        StartFireBrute()
     end
 })
 
@@ -972,11 +982,15 @@ Tab:CreateInput({
     PlaceholderText = "Degrees per second",
     RemoveTextAfterFocusLost = false,
     Flag = "SpinSpeed",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number > 0 then
+        if number
+            and number > 0
+        then
             SpinSpeed = number
         end
     end
@@ -988,11 +1002,15 @@ Tab:CreateInput({
     PlaceholderText = "Seconds",
     RemoveTextAfterFocusLost = false,
     Flag = "TargetTimeout",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number >= 0 then
+        if number
+            and number >= 0
+        then
             TargetTimeout = number
         end
     end
@@ -1004,11 +1022,15 @@ Tab:CreateInput({
     PlaceholderText = "Enter distance",
     RemoveTextAfterFocusLost = false,
     Flag = "StopDistance",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number >= 0 then
+        if number
+            and number >= 0
+        then
             StopDistance = number
         end
     end
@@ -1020,11 +1042,15 @@ Tab:CreateInput({
     PlaceholderText = "Enter distance",
     RemoveTextAfterFocusLost = false,
     Flag = "WalkAwayDistance",
+
     Callback = function(Text)
 
-        local number = tonumber(Text)
+        local number =
+            tonumber(Text)
 
-        if number and number >= 0 then
+        if number
+            and number >= 0
+        then
             WalkAwayDistance = number
         end
     end
