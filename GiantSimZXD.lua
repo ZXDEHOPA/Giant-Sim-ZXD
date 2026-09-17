@@ -135,7 +135,6 @@ end
 
 --------------------------------------------------
 -- FIRE BRUTE
--- ORIGINAL WORKING LOGIC
 --------------------------------------------------
 
 local function GetNearestFireBrute(root, excludedTarget)
@@ -262,28 +261,24 @@ local function GetWalkAwayPosition(root, target)
 end
 
 --------------------------------------------------
--- FIRE MAGE STATE
+-- STATES
 --------------------------------------------------
 
 local FireMageTarget = nil
 local FireMageDodgeSide = 1
 local FireMageNextDodgeTime = 0
 
-local function ResetFireMage()
-    FireMageTarget = nil
-    FireMageDodgeSide = 1
-    FireMageNextDodgeTime = 0
-end
-
---------------------------------------------------
--- FIRE BRUTE STATE
---------------------------------------------------
-
 local FireBruteTarget = nil
 local FireBrutePreviousTarget = nil
 local FireBruteState = "Find"
 local FireBruteAwayPosition = nil
 local FireBruteLockStartTime = 0
+
+local function ResetFireMage()
+    FireMageTarget = nil
+    FireMageDodgeSide = 1
+    FireMageNextDodgeTime = 0
+end
 
 local function ResetFireBrute()
     FireBruteTarget = nil
@@ -413,19 +408,12 @@ local function RunRespawnRoute(character)
 end
 
 --------------------------------------------------
--- MOVEMENT CONTROLLER
---
--- ONLY THIS LOOP CONTROLS MOVEMENT.
--- FM and FB CANNOT FIGHT EACH OTHER.
+-- SINGLE MOVEMENT CONTROLLER
 --------------------------------------------------
 
 task.spawn(function()
 
     while true do
-
-        --------------------------------------------------
-        -- RESPAWN ROUTE OWNS MOVEMENT
-        --------------------------------------------------
 
         if RespawnRouteActive then
             task.wait(0.1)
@@ -461,10 +449,7 @@ task.spawn(function()
         end
 
         --------------------------------------------------
-        -- ACTUAL FIRE MAGE DETECTION
-        --
-        -- Toggle ON alone does NOTHING.
-        -- A FireMage model must actually exist.
+        -- ONLY AN ACTUAL SPAWNED FIREMAGE CAN TAKE OVER
         --------------------------------------------------
 
         local FireMageSpawned = nil
@@ -474,20 +459,17 @@ task.spawn(function()
         end
 
         --------------------------------------------------
-        -- FIRE MAGE HAS MOVEMENT PRIORITY
-        -- ONLY WHILE IT ACTUALLY EXISTS.
+        -- FIRE MAGE
         --------------------------------------------------
 
         if FireMageSpawned then
 
-            --------------------------------------------------
-            -- FM TARGET
-            --------------------------------------------------
-
             if not FireMageTarget
                 or not FireMageTarget.Parent
             then
-                FireMageTarget = FireMageSpawned
+                FireMageTarget =
+                    FireMageSpawned
+
                 FireMageNextDodgeTime = 0
             end
 
@@ -501,10 +483,6 @@ task.spawn(function()
                         FireMageTarget
                     )
 
-                --------------------------------------------------
-                -- WALK TOWARD FIRE MAGE
-                --------------------------------------------------
-
                 if distance > AttackDistance then
 
                     humanoid:MoveTo(
@@ -512,10 +490,6 @@ task.spawn(function()
                             FireMageTarget
                         )
                     )
-
-                --------------------------------------------------
-                -- DODGE AROUND FIRE MAGE
-                --------------------------------------------------
 
                 else
 
@@ -554,6 +528,7 @@ task.spawn(function()
                 end
 
             else
+
                 ResetFireMage()
 
                 humanoid:Move(
@@ -567,24 +542,14 @@ task.spawn(function()
             end
 
         --------------------------------------------------
-        -- NO FIRE MAGE SPAWNED
-        -- FIRE BRUTE GETS FULL CONTROL.
+        -- FIRE BRUTE
         --------------------------------------------------
 
         elseif FireBruteEnabled then
 
-            --------------------------------------------------
-            -- FIRE MAGE DISAPPEARED
-            -- CLEAR ONLY FM STATE.
-            --------------------------------------------------
-
             if FireMageTarget then
                 ResetFireMage()
             end
-
-            --------------------------------------------------
-            -- ORIGINAL FIRE BRUTE FIND
-            --------------------------------------------------
 
             if FireBruteState == "Find" then
 
@@ -613,10 +578,6 @@ task.spawn(function()
                     end
                 end
             end
-
-            --------------------------------------------------
-            -- ORIGINAL FIRE BRUTE LOGIC
-            --------------------------------------------------
 
             if FireBruteTarget
                 and FireBruteTarget.Parent
@@ -789,10 +750,6 @@ task.spawn(function()
                     "Find"
             end
 
-        --------------------------------------------------
-        -- NOTHING ACTIVE
-        --------------------------------------------------
-
         else
 
             ResetFireMage()
@@ -869,8 +826,24 @@ Player.CharacterAdded:Connect(
 )
 
 --------------------------------------------------
--- FIRE MAGE UI
+-- TOGGLES
+-- TOGETHER AT THE TOP
 --------------------------------------------------
+
+Tab:CreateToggle({
+    Name = "FireBrute [ MOBS ]",
+    CurrentValue = false,
+    Flag = "FireBrute",
+
+    Callback = function(Value)
+
+        FireBruteEnabled = Value
+
+        if not Value then
+            ResetFireBrute()
+        end
+    end
+})
 
 Tab:CreateToggle({
     Name = "Fire Mage [ BOSS ]",
@@ -887,93 +860,13 @@ Tab:CreateToggle({
     end
 })
 
-Tab:CreateInput({
-    Name = "Attack Distance",
-    CurrentValue = "1",
-    PlaceholderText = "Enter distance",
-    RemoveTextAfterFocusLost = false,
-    Flag = "AttackDistance",
-
-    Callback = function(Text)
-
-        local number =
-            tonumber(Text)
-
-        if number
-            and number >= 0
-        then
-            AttackDistance = number
-        end
-    end
-})
-
-Tab:CreateInput({
-    Name = "Dodge Min",
-    CurrentValue = "1.5",
-    PlaceholderText = "Seconds",
-    RemoveTextAfterFocusLost = false,
-    Flag = "DodgeMin",
-
-    Callback = function(Text)
-
-        local number =
-            tonumber(Text)
-
-        if number
-            and number > 0
-        then
-
-            DodgeMin = number
-
-            if DodgeMax < DodgeMin then
-                DodgeMax = DodgeMin
-            end
-        end
-    end
-})
-
-Tab:CreateInput({
-    Name = "Dodge Max",
-    CurrentValue = "3",
-    PlaceholderText = "Seconds",
-    RemoveTextAfterFocusLost = false,
-    Flag = "DodgeMax",
-
-    Callback = function(Text)
-
-        local number =
-            tonumber(Text)
-
-        if number
-            and number > 0
-        then
-
-            DodgeMax = number
-
-            if DodgeMax < DodgeMin then
-                DodgeMax = DodgeMin
-            end
-        end
-    end
-})
-
 --------------------------------------------------
--- FIRE BRUTE UI
+-- FIRE BRUTE SETTINGS
 --------------------------------------------------
 
-Tab:CreateToggle({
-    Name = "FireBrute [ MOBS ]",
-    CurrentValue = false,
-    Flag = "FireBrute",
-
-    Callback = function(Value)
-
-        FireBruteEnabled = Value
-
-        if not Value then
-            ResetFireBrute()
-        end
-    end
+Tab:CreateParagraph({
+    Title = "FIRE BRUTE SETTINGS",
+    Content = "FireBrute movement settings"
 })
 
 Tab:CreateInput({
@@ -1052,6 +945,85 @@ Tab:CreateInput({
             and number >= 0
         then
             WalkAwayDistance = number
+        end
+    end
+})
+
+--------------------------------------------------
+-- FIRE MAGE SETTINGS
+--------------------------------------------------
+
+Tab:CreateParagraph({
+    Title = "FIRE MAGE SETTINGS",
+    Content = "FireMage movement settings"
+})
+
+Tab:CreateInput({
+    Name = "Attack Distance",
+    CurrentValue = "1",
+    PlaceholderText = "Enter distance",
+    RemoveTextAfterFocusLost = false,
+    Flag = "AttackDistance",
+
+    Callback = function(Text)
+
+        local number =
+            tonumber(Text)
+
+        if number
+            and number >= 0
+        then
+            AttackDistance = number
+        end
+    end
+})
+
+Tab:CreateInput({
+    Name = "Dodge Min",
+    CurrentValue = "1.5",
+    PlaceholderText = "Seconds",
+    RemoveTextAfterFocusLost = false,
+    Flag = "DodgeMin",
+
+    Callback = function(Text)
+
+        local number =
+            tonumber(Text)
+
+        if number
+            and number > 0
+        then
+
+            DodgeMin = number
+
+            if DodgeMax < DodgeMin then
+                DodgeMax = DodgeMin
+            end
+        end
+    end
+})
+
+Tab:CreateInput({
+    Name = "Dodge Max",
+    CurrentValue = "3",
+    PlaceholderText = "Seconds",
+    RemoveTextAfterFocusLost = false,
+    Flag = "DodgeMax",
+
+    Callback = function(Text)
+
+        local number =
+            tonumber(Text)
+
+        if number
+            and number > 0
+        then
+
+            DodgeMax = number
+
+            if DodgeMax < DodgeMin then
+                DodgeMax = DodgeMin
+            end
         end
     end
 })
